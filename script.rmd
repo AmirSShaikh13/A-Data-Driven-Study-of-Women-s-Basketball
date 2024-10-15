@@ -1,0 +1,118 @@
+knitr::opts_chunk$set(echo = TRUE)
+
+library(glmnet)
+library(gridExtra)
+library(grid)
+library(ggcorrplot)
+library(GGally)
+library(tidyverse)
+library(dplyr)
+library(magrittr)
+library(tidyr)
+library(skimr)
+library(kableExtra)
+library(visdat)
+library(inspectdf)
+library(DataExplorer)
+library(stargazer)
+library(corrplot)
+library(ggplot2)
+library(scatterplot3d)
+library(pROC)
+library(lubridate)
+library(caret)
+library(ISLR)
+library(data.table)
+library(psych)
+
+options(max.print=5000)    
+mydata <- read.csv("WNBA-2014-player-stats-by-game.csv", header = TRUE)
+nrow(mydata)               # Displays the number of rows in the dataset
+class(mydata)              # Displays the class of dataframe
+View(mydata)             
+summary(mydata)
+skim(mydata)
+stargazer(mydata, type = "text",
+          title = "Descriptive Statistics", 
+          header = FALSE,
+          single.row = TRUE)
+vis_dat(mydata)
+plot_missing(mydata)
+a <- inspect_na(mydata) 
+show_plot(a)
+mydata1 <- mydata %>% dplyr::select (-X,-X.1)
+mydata1
+plot_missing(mydata1)
+
+ggplot(mydata1, aes(y = team, x = team_pts)) + 
+    geom_point(size = 1, color = "red", shape = 15) +  
+    theme_minimal() + 
+    ggtitle("Team Versus Points") + 
+    labs(ylab = "Points", xlab = "Teams")
+
+# Variable 1 - points
+ggplot(data = subset(mydata, !is.na(points)), aes(x = points)) + 
+    geom_histogram(fill = 'deepskyblue4', bins = 60) +
+    scale_x_continuous(trans = "log10", 
+                       breaks = c(2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40)) +
+    geom_vline(xintercept = median(mydata$points), colour = 'blue', size = 1) +
+    geom_vline(xintercept = mean(mydata$points), colour = 'brown', size = 1)
+
+# Variable 2 - fouls
+mydata <- mydata[mydata$fouls >= 1 & mydata$fouls <= 5, ]
+ggplot(data = subset(mydata, !is.na(fouls)),
+       aes(x = fouls)) +
+    geom_histogram(binwidth = 1, fill = 'deepskyblue4') +
+    scale_x_continuous(breaks = seq(0, 2, 4)) +
+    geom_vline(xintercept = mean(mydata$fouls), colour = 'blue', size = 1)
+
+# Scatter plots for analysis
+attach(dataframe1)
+qplot(x = block, y = turnover, color = "green", geom = "point") + scale_shape(solid = FALSE) + theme(text = element_text(size = 9))
+qplot(x = fouls, y = points, color = "blue", geom = "point") + scale_shape(solid = FALSE) + theme(text = element_text(size = 9))
+
+lm(block ~ turnover + fouls + points, data = mydata)
+summary(dataframe1)
+
+# Boxplots for analysis
+a <- qplot(x = points, y = player_id, fill = "red", geom = "boxplot") + guides(fill = "none")
+b <- qplot(x = block, y = turnover, fill = "green", geom = "boxplot") + guides(fill = "none")
+c <- qplot(x = points, y = fouls, fill = "red", geom = "boxplot") + guides(fill = "none")
+d <- qplot(x = block, y = player_id, fill = "green", geom = "boxplot") + guides(fill = "none")
+grid.arrange(a, b, c, d, nrow = 1, top = textGrob("Comparison of players and the chosen parameters", gp = gpar(fontsize = 19, font = 7)))
+
+# Logistic regression models
+set.seed(123)
+trainindex1 <- createDataPartition(dataframe1$points, p = 0.7, list = FALSE)
+tests <- dataframe1[-trainindex1,]
+trains <- dataframe1[trainindex1,]
+head(trains)
+
+firstmodel <- glm(player_id ~ points, data = mydata)
+summary(firstmodel)
+
+secondmodel <- glm(player_id ~ fouls, data = trains)
+summary(secondmodel)
+
+coef(secondmodel)
+exp(coef(secondmodel))
+
+# Predicting values
+testingdata <- data.frame(fouls = 1, points = c(min(points), mean(points), max(points)))
+testingdata$points <- predict(secondmodel, testingdata, type = "response")
+round(testingdata, 4)
+
+# Predicting probabilities
+probabilitiesoftrain <- predict(secondmodel, newdata = trains, type = "response")
+predictedclassesmin <- as.factor(ifelse(probabilitiesoftrain >= 0.5, "Yes", "No"))
+head(predictedclassesmin)
+
+probabilitiesoftest <- predict(secondmodel, newdata = tests, type = "response")
+predictedclassesmin <- as.factor(ifelse(probabilitiesoftest >= 0.5, "Yes", "No"))
+head(predictedclassesmin)
+
+# ROC and AUC
+firstroc <- roc(tests$points, probabilitiesoftest)
+plot(firstroc, col = "red", ylab = "Sensitivity of TpRate", xlab = "Specificity of FpRate")
+auc <- auc(firstroc)
+auc
